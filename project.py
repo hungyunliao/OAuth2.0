@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, redirect,jsonify, url_for, fl
 
 from sqlalchemy import create_engine, asc
 from sqlalchemy.orm import sessionmaker
-from database_setup import Base, Restaurant, MenuItem
+from database_setup import Base, Restaurant, MenuItem, User
 
 from flask import session as login_session
 import random, string
@@ -21,7 +21,7 @@ CLIENT_ID = json.loads(open('client_secrets.json', 'r').read())['web']['client_i
 APPLICATION_NAME = "Restaurant Menu Application"
 
 #Connect to Database and create database session
-engine = create_engine('sqlite:///restaurantmenu.db')
+engine = create_engine('sqlite:///restaurantmenuwithusers.db')
 Base.metadata.bind = engine
 
 DBSession = sessionmaker(bind=engine)
@@ -58,6 +58,7 @@ def gconnect():
 
     # Check that the access token is valid.
     access_token = credentials.access_token
+    login_session['access_token'] = access_token
     url = ('https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=%s'
            % access_token)
     h = httplib2.Http()
@@ -84,7 +85,7 @@ def gconnect():
         response.headers['Content-Type'] = 'application/json'
         return response
 
-    stored_access_token = login_session.get('access_token')
+    stored_access_token = login_session['access_token']
     stored_gplus_id = login_session.get('gplus_id')
     if stored_access_token is not None and gplus_id == stored_gplus_id:
         response = make_response(json.dumps('Current user is already connected.'),
@@ -108,7 +109,13 @@ def gconnect():
     login_session['username'] = data['name']
     login_session['picture'] = data['picture']
     login_session['email'] = data['email']
-
+    
+    # See if a user exist, if it doesn't create a new one
+    user_id = getUserID(login_session['email'])
+    if user_id is None:
+        user_id = createUser(login_session)
+    login_session['user_id'] = user_id
+    
     output = ''
     output += '<h1>Welcome, '
     output += login_session['username']
@@ -154,6 +161,28 @@ def gdisconnect():
         response.headers['Content-Type'] = 'application/json'
         return response
 
+# User Helper Functions
+def createUser(login_session):
+    newUser = User(name=login_session['username'], email=login_session[
+                   'email'], picture=login_session['picture'])
+    session.add(newUser)
+    session.commit()
+    user = session.query(User).filter_by(email=login_session['email']).one()
+    return user.id
+
+
+def getUserInfo(user_id):
+    user = session.query(User).filter_by(id=user_id).one()
+    return user
+
+
+def getUserID(email):
+    try:
+        user = session.query(User).filter_by(email=email).one()
+        return user.id
+    except:
+        return None    
+    
 @app.route('/restaurant/<int:restaurant_id>/menu/JSON')
 def restaurantMenuJSON(restaurant_id):
     session = DBSession()
@@ -181,6 +210,9 @@ def restaurantsJSON():
 def showRestaurants():
     session = DBSession()
     restaurants = session.query(Restaurant).order_by(asc(Restaurant.name))
+#    if 'gplus_id' not in login_session:
+#        return render_template('publicrestaurants.html', restaurants = restaurants)
+#    else:
     return render_template('restaurants.html', restaurants = restaurants)
 
 #Create a new restaurant
