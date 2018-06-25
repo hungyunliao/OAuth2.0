@@ -11,4 +11,23 @@
 			{% endblock %}
 		</div>
 	</body>
+    <script>
+        function check_auth(type) {
+            var user_id = "{{user_id}}";
+            var r_user_id = "{{r_user_id}}";
+            
+            if(type == 'newRestaurant') {
+                if(user_id == 'new') {
+                    alert('You are not authorized.');
+                    return false;
+                }
+            } else {
+                if(user_id != r_user_id) {
+                    alert('You are not authorized.');
+                    return false;
+                }
+            }
+            return true;
+        }
+    </script>
 </html>
